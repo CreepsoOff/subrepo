@@ -1,0 +1,88 @@
+name: Qt flag probe (c++23 + -no-emojisegmenter)
+
+on:
+  workflow_dispatch:
+    inputs:
+      make_release:
+        description: "Create/update a release tag 'qt-flag-probe' and upload report asset"
+        type: boolean
+        default: false
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        qt:
+          - 6.11.2
+          - 6.11.1
+          - 6.10.4
+          - 6.10.3
+          - 6.9.3
+          - 6.9.2
+          - 6.8.3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe Qt flags
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          ./scripts/probe-qt.ps1 -QtVersion "${{ matrix.qt }}" -OutDir "out"
+
+      - name: Upload per-version report
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-probe-${{ matrix.qt }}
+          path: out/
+
+  merge-report:
+    runs-on: ubuntu-latest
+    needs: probe
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: qt-probe-*
+          merge-multiple: true
+          path: reports
+
+      - name: Build merged markdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "# Qt flag probe results"
+            echo ""
+            echo "Criteria: must support **-no-emojisegmenter** and **-c++std c++23** (no fallback, no workaround)."
+            echo ""
+            echo "## Per-version results"
+            echo ""
+            if compgen -G "reports/*.md" > /dev/null; then
+              for f in reports/*.md; do
+                cat "$f"
+                echo ""
+              done
+            else
+              echo "_No per-version markdown found._"
+            fi
+          } > qt-flag-probe-report.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qt-flag-probe-report
+          path: qt-flag-probe-report.md
+
+      - name: Create/Update release and upload asset
+        if: ${{ inputs.make_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: qt-flag-probe
+          name: "Qt flag probe"
+          body_path: qt-flag-probe-report.md
+          files: qt-flag-probe-report.md
+          prerelease: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
