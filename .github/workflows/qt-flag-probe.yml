@@ -7,21 +7,43 @@ on:
         description: "Create/update a release tag 'qt-flag-probe' and upload report asset"
         type: boolean
         default: false
+      min_version:
+        description: "Minimum Qt minor series to test (e.g. '6.9'). Leave empty to test ALL Qt 6.x versions."
+        type: string
+        default: "6.9"
 
 jobs:
+  list-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      versions: ${{ steps.list.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Discover Qt 6.x versions
+        id: list
+        shell: pwsh
+        run: |
+          $minVer = "${{ inputs.min_version }}"
+          if ($minVer -ne "") {
+            ./scripts/list-qt6-versions.ps1 -MinVersion $minVer -OutFile qt6-versions.json
+          } else {
+            ./scripts/list-qt6-versions.ps1 -OutFile qt6-versions.json
+          }
+          $json = (Get-Content qt6-versions.json -Raw).Trim()
+          "versions=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
   probe:
+    needs: list-versions
     runs-on: windows-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        qt:
-          - 6.11.2
-          - 6.11.1
-          - 6.10.4
-          - 6.10.3
-          - 6.9.3
-          - 6.9.2
-          - 6.8.3
+        qt: ${{ fromJSON(needs.list-versions.outputs.versions) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +63,8 @@ jobs:
   merge-report:
     runs-on: ubuntu-latest
     needs: probe
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4

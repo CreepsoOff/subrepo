@@ -121,6 +121,6 @@ Write-Json (Join-Path $OutDir "result-$QtVersion.json") $result
   "- has `-c++std`: $($result.checks.has_cxxstd)",
   "- mentions `c++23`: $($result.checks.mentions_cxx23)",
   "- smoke configure (exact flags) OK: $($result.checks.configure_smoke_ok)",
-  $(if ($result.error) { "- error: `$($result.error)`" } else { "" }),
+  $(if ($result.error) { "- error: ``$($result.error)``" } else { "" }),
   ""
 ) -join "`n" | Set-Content -Path (Join-Path $OutDir "result-$QtVersion.md") -Encoding UTF8
